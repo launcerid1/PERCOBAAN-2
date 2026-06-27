@@ -3,145 +3,179 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Super Mario Sederhana</title>
+  <title>Super Mario 5 Stage</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      display: flex; flex-direction: column; align-items: center;
-      justify-content: center; min-height: 100vh;
-      background: linear-gradient(#87CEEB, #E0F7FA); font-family: sans-serif;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 100vh; background: linear-gradient(#87CEEB, #E0F7FA); font-family: 'Segoe UI', sans-serif;
     }
-    h1 { margin-bottom: 10px; color: #d32f2f; text-shadow: 2px 2px #fff; }
-    canvas {
-      border: 4px solid #333; border-radius: 6px;
-      background: #5c94fc; box-shadow: 0 8px 20px rgba(0,0,0,0.3);
-    }
-    .info { margin-top: 12px; color: #333; font-weight: bold; }
+    h1 { margin-bottom: 10px; color: #d32f2f; text-shadow: 2px 2px #fff; font-size: 28px; }
+    #game { border: 4px solid #333; border-radius: 6px; background: #5c94fc; box-shadow: 0 8px 20px rgba(0,0,0,0.3); }
+    .info { margin-top: 12px; color: #333; font-weight: bold; display: flex; gap: 20px; font-size: 16px; }
     .controls { margin-top: 8px; color: #555; font-size: 14px; }
+    .stage { color: #d32f2f; }
   </style>
 </head>
 <body>
-  <h1>Super Mario Sederhana</h1>
+  <h1>Super Mario 5 Stage</h1>
   <canvas id="game" width="800" height="400"></canvas>
-  <div class="info">Skor: <span id="score">0</span></div>
-  <div class="controls">← → untuk bergerak | Spasi / ↑ untuk melompat</div>
+  <div class="info">
+    <span>Skor: <span id="score">0</span></span>
+    <span>Nyawa: <span id="lives">3</span></span>
+    <span class="stage">Stage: <span id="stage">1</span>/5</span>
+  </div>
+  <div class="controls">A / D jalan | Spasi / W lompat | R restart</div>
 
   <script>
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
     const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const stageEl = document.getElementById('stage');
 
     const GRAVITY = 0.6;
-    const FRICTION = 0.8;
+    const FRICTION = 0.85;
+    const GROUND = 340;
+    const TOTAL_WIDTH = 4800;
 
-    const mario = {
-      x: 50, y: 300, width: 30, height: 40,
-      vx: 0, vy: 0, speed: 5, jump: -12,
-      grounded: false, color: '#ff0000', alive: true
-    };
-
-    const keys = {};
+    let mario = { x: 50, y: 300, width: 30, height: 40, vx: 0, vy: 0, speed: 5, jump: -12, grounded: false, alive: true, facing: 1 };
+    let keys = {};
     let score = 0;
+    let lives = 3;
+    let stage = 1;
     let cameraX = 0;
+    let frame = 0;
+    let goombas = [];
+    let coins = [];
+    let platforms = [];
+    let pipes = [];
+    let mountains = [];
+    let clouds = [];
+    let flag = { x: 0, y: 240, width: 40, height: 100 };
 
-    const groundLevel = 340;
-    const platforms = [];
-    for (let i = 0; i < 50; i++) {
-      platforms.push({ x: i * 100, y: groundLevel, width: 100, height: 60 });
+    function generateStage(s) {
+      platforms = []; pipes = []; mountains = []; clouds = []; coins = []; goombas = [];
+      for (let i = 0; i < 48; i++) {
+        platforms.push({ x: i * 100, y: GROUND, width: 100, height: 60 });
+      }
+      for (let i = 0; i < 8; i++) {
+        mountains.push({ x: i * 600 + 100, y: GROUND - 80, width: 120, height: 80 });
+      }
+      for (let i = 0; i < 15; i++) {
+        clouds.push({ x: i * 350 + 50, y: 40 + Math.random() * 60, size: 30 + Math.random() * 20 });
+      }
+      for (let i = 0; i < 12; i++) {
+        pipes.push({ x: 300 + i * 380 + Math.random() * 100, y: GROUND - 50, width: 50, height: 50, plant: i % 3 === 0 });
+      }
+      for (let i = 0; i < 30; i++) {
+        coins.push({ x: 200 + i * 150 + Math.random() * 80, y: 200 + Math.random() * 80, size: 12, taken: false });
+      }
+      for (let i = 0; i < 10 + s * 2; i++) {
+        goombas.push({ x: 400 + i * 400 + Math.random() * 200, y: GROUND - 30, width: 30, height: 30, vx: 1 + s * 0.2, alive: true });
+      }
+      flag.x = 4600;
+      mario.x = 50; mario.y = 300; mario.vx = 0; mario.vy = 0;
+      cameraX = 0;
     }
 
-    const obstacles = [
-      { x: 400, y: 310, width: 30, height: 30 },
-      { x: 700, y: 310, width: 30, height: 30 },
-      { x: 1100, y: 310, width: 30, height: 30 },
-      { x: 1500, y: 310, width: 30, height: 30 }
-    ];
+    function resetGame() {
+      score = 0; lives = 3; stage = 1; mario.alive = true;
+      scoreEl.textContent = score; livesEl.textContent = lives; stageEl.textContent = stage;
+      generateStage(stage);
+    }
 
-    const coins = [
-      { x: 350, y: 250, size: 15, taken: false },
-      { x: 650, y: 250, size: 15, taken: false },
-      { x: 950, y: 250, size: 15, taken: false },
-      { x: 1350, y: 250, size: 15, taken: false },
-      { x: 1750, y: 250, size: 15, taken: false }
-    ];
+    function nextStage() {
+      if (stage < 5) {
+        stage++;
+        stageEl.textContent = stage;
+        generateStage(stage);
+      } else {
+        alert('Selamat! Anda menyelesaikan semua 5 stage! Skor akhir: ' + score);
+        resetGame();
+      }
+    }
 
-    const flag = { x: 2200, y: 240, width: 40, height: 100 };
+    generateStage(stage);
 
-    document.addEventListener('keydown', (e) => { keys[e.code] = true; });
-    document.addEventListener('keyup', (e) => { keys[e.code] = false; });
+    document.addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'Space' || e.code === 'ArrowUp') e.preventDefault(); });
+    document.addEventListener('keyup', e => { keys[e.code] = false; if (e.code === 'KeyR' && !mario.alive) resetGame(); });
 
     function update() {
       if (!mario.alive) return;
+      frame++;
 
-      if (keys['ArrowLeft']) mario.vx -= 1;
-      if (keys['ArrowRight']) mario.vx += 1;
-      if ((keys['Space'] || keys['ArrowUp']) && mario.grounded) {
-        mario.vy = mario.jump;
-        mario.grounded = false;
-      }
+      if (keys['ArrowLeft'] || keys['KeyA']) { mario.vx -= 1; mario.facing = -1; }
+      if (keys['ArrowRight'] || keys['KeyD']) { mario.vx += 1; mario.facing = 1; }
+      if ((keys['Space'] || keys['ArrowUp'] || keys['KeyW']) && mario.grounded) { mario.vy = mario.jump; mario.grounded = false; }
 
       mario.vx *= FRICTION;
       mario.vy += GRAVITY;
       mario.x += mario.vx;
       mario.y += mario.vy;
 
+      if (mario.x < 0) mario.x = 0;
+      if (mario.x > TOTAL_WIDTH - mario.width) mario.x = TOTAL_WIDTH - mario.width;
+
       mario.grounded = false;
       for (let p of platforms) {
-        if (mario.x + mario.width > p.x && mario.x < p.x + p.width &&
-            mario.y + mario.height > p.y && mario.y + mario.height < p.y + p.height + 20 &&
-            mario.vy >= 0) {
-          mario.y = p.y - mario.height;
-          mario.vy = 0;
-          mario.grounded = true;
+        if (rectIntersect(mario, p) && mario.vy >= 0 && mario.y + mario.height - mario.vy <= p.y) {
+          mario.y = p.y - mario.height; mario.vy = 0; mario.grounded = true;
+        }
+      }
+      for (let pipe of pipes) {
+        if (rectIntersect(mario, pipe) && mario.vy >= 0 && mario.y + mario.height - mario.vy <= pipe.y) {
+          mario.y = pipe.y - mario.height; mario.vy = 0; mario.grounded = true;
         }
       }
 
-      if (mario.y > canvas.height) {
-        mario.alive = false;
-      }
+      if (mario.y > canvas.height) die();
 
-      for (let o of obstacles) {
-        if (rectIntersect(mario, o)) {
-          mario.alive = false;
+      for (let g of goombas) {
+        if (g.alive) {
+          g.x += g.vx;
+          if (g.x < 0 || g.x > TOTAL_WIDTH - g.width) g.vx *= -1;
+          if (rectIntersect(mario, g)) {
+            if (mario.vy > 0 && mario.y + mario.height - mario.vy <= g.y) {
+              g.alive = false; mario.vy = -7; score += 50;
+            } else {
+              die();
+            }
+          }
         }
       }
 
       for (let c of coins) {
-        if (!c.taken && circleRectIntersect(c, mario)) {
-          c.taken = true;
-          score += 10;
-          scoreEl.textContent = score;
-        }
+        if (!c.taken && circleRectIntersect(c, mario)) { c.taken = true; score += 10; }
       }
 
-      if (rectIntersect(mario, flag)) {
-        alert('Selamat! Anda menang! Skor: ' + score);
-        resetGame();
-      }
+      if (rectIntersect(mario, flag)) { nextStage(); }
 
+      scoreEl.textContent = score;
       cameraX = mario.x - 150;
       if (cameraX < 0) cameraX = 0;
+      if (cameraX > TOTAL_WIDTH - canvas.width) cameraX = TOTAL_WIDTH - canvas.width;
+    }
+
+    function die() {
+      lives--;
+      livesEl.textContent = lives;
+      if (lives <= 0) {
+        mario.alive = false;
+      } else {
+        mario.x = 50; mario.y = 300; mario.vx = 0; mario.vy = 0;
+      }
     }
 
     function rectIntersect(a, b) {
-      return a.x < b.x + b.width && a.x + a.width > b.x &&
-             a.y < b.y + b.height && a.y + a.height > b.y;
+      return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
     }
 
     function circleRectIntersect(c, r) {
-      const closestX = Math.max(r.x, Math.min(c.x, r.x + r.width));
-      const closestY = Math.max(r.y, Math.min(c.y, r.y + r.height));
-      const dx = c.x - closestX;
-      const dy = c.y - closestY;
+      let cx = Math.max(r.x, Math.min(c.x, r.x + r.width));
+      let cy = Math.max(r.y, Math.min(c.y, r.y + r.height));
+      let dx = c.x - cx; let dy = c.y - cy;
       return (dx * dx + dy * dy) < (c.size * c.size);
-    }
-
-    function resetGame() {
-      mario.x = 50; mario.y = 300; mario.vx = 0; mario.vy = 0;
-      mario.alive = true; mario.grounded = false;
-      score = 0; scoreEl.textContent = score;
-      cameraX = 0;
-      coins.forEach(c => c.taken = false);
     }
 
     function draw() {
@@ -149,76 +183,83 @@
       ctx.save();
       ctx.translate(-cameraX, 0);
 
-      for (let p of platforms) {
-        ctx.fillStyle = '#4caf50';
-        ctx.fillRect(p.x, p.y, p.width, p.height);
-        ctx.strokeStyle = '#2e7d32';
-        ctx.strokeRect(p.x, p.y, p.width, p.height);
+      ctx.fillStyle = '#87CEEB';
+      ctx.fillRect(cameraX, 0, canvas.width, canvas.height);
+
+      for (let c of clouds) {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(c.x, c.y, c.size, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(c.x + c.size * 0.8, c.y, c.size * 0.9, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(c.x + c.size * 1.5, c.y, c.size * 0.7, 0, Math.PI * 2); ctx.fill();
       }
 
-      for (let o of obstacles) {
-        ctx.fillStyle = '#795548';
-        ctx.beginPath();
-        ctx.moveTo(o.x + o.width / 2, o.y);
-        ctx.lineTo(o.x + o.width, o.y + o.height);
-        ctx.lineTo(o.x, o.y + o.height);
-        ctx.closePath();
-        ctx.fill();
+      for (let m of mountains) {
+        ctx.fillStyle = '#2e7d32';
+        ctx.beginPath(); ctx.moveTo(m.x, m.y + m.height); ctx.lineTo(m.x + m.width / 2, m.y); ctx.lineTo(m.x + m.width, m.y + m.height); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.moveTo(m.x + m.width / 2 - 15, m.y + 25); ctx.lineTo(m.x + m.width / 2, m.y); ctx.lineTo(m.x + m.width / 2 + 15, m.y + 25); ctx.closePath(); ctx.fill();
+      }
+
+      for (let p of platforms) {
+        ctx.fillStyle = '#4caf50'; ctx.fillRect(p.x, p.y, p.width, p.height);
+        ctx.fillStyle = '#795548'; ctx.fillRect(p.x, p.y + 40, p.width, 20);
+      }
+
+      for (let pipe of pipes) {
+        ctx.fillStyle = '#00c853'; ctx.fillRect(pipe.x, pipe.y, pipe.width, pipe.height);
+        ctx.fillStyle = '#009624'; ctx.fillRect(pipe.x - 5, pipe.y, pipe.width + 10, 15);
+        if (pipe.plant) {
+          let py = pipe.y - 35 + Math.sin(frame * 0.05) * 15;
+          ctx.fillStyle = '#ff1744'; ctx.fillRect(pipe.x + 10, py, 20, 35);
+          ctx.fillStyle = '#fff'; ctx.fillRect(pipe.x + 12, py + 8, 5, 5); ctx.fillRect(pipe.x + 22, py + 8, 5, 5);
+        }
       }
 
       for (let c of coins) {
         if (!c.taken) {
-          ctx.fillStyle = '#ffd700';
-          ctx.beginPath();
-          ctx.arc(c.x, c.y, c.size, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#ff8c00';
-          ctx.stroke();
+          ctx.fillStyle = '#ffd700'; ctx.beginPath(); ctx.arc(c.x, c.y + Math.sin(frame * 0.1) * 3, c.size, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#ff8c00'; ctx.beginPath(); ctx.arc(c.x, c.y + Math.sin(frame * 0.1) * 3, c.size - 3, 0, Math.PI * 2); ctx.fill();
         }
       }
 
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(flag.x, flag.y, 10, flag.height);
-      ctx.fillStyle = '#ff0000';
-      ctx.beginPath();
-      ctx.moveTo(flag.x + 10, flag.y);
-      ctx.lineTo(flag.x + 50, flag.y + 20);
-      ctx.lineTo(flag.x + 10, flag.y + 40);
-      ctx.closePath();
-      ctx.fill();
+      for (let g of goombas) {
+        if (g.alive) {
+          ctx.fillStyle = '#8d6e63'; ctx.beginPath(); ctx.arc(g.x + g.width / 2, g.y + g.height / 2, g.width / 2, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#3e2723'; ctx.fillRect(g.x + 5, g.y + 5, 8, 8); ctx.fillRect(g.x + 18, g.y + 5, 8, 8);
+          ctx.fillStyle = '#fff'; ctx.fillRect(g.x + 7, g.y + 7, 3, 3); ctx.fillRect(g.x + 20, g.y + 7, 3, 3);
+        }
+      }
 
-      ctx.fillStyle = mario.color;
-      ctx.fillRect(mario.x, mario.y, mario.width, mario.height);
-      ctx.fillStyle = '#ffcc80';
-      ctx.fillRect(mario.x + 5, mario.y + 5, 20, 15);
-      ctx.fillStyle = '#000';
-      ctx.fillRect(mario.x + 18, mario.y + 8, 4, 4);
-      ctx.fillStyle = '#0000ff';
-      ctx.fillRect(mario.x + 2, mario.y + 20, 26, 14);
+      ctx.fillStyle = '#fff'; ctx.fillRect(flag.x, flag.y, 6, flag.height);
+      ctx.fillStyle = '#ff0000'; ctx.beginPath(); ctx.moveTo(flag.x + 6, flag.y); ctx.lineTo(flag.x + 45, flag.y + 20); ctx.lineTo(flag.x + 6, flag.y + 40); ctx.closePath(); ctx.fill();
+
+      drawMario();
 
       ctx.restore();
 
       if (!mario.alive) {
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#fff';
-        ctx.font = '40px sans-serif';
-        ctx.fillText('Game Over!', 300, 180);
-        ctx.font = '20px sans-serif';
-        ctx.fillText('Tekan R untuk main lagi', 280, 220);
+        ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#fff'; ctx.font = '40px sans-serif'; ctx.fillText('Game Over!', 300, 180);
+        ctx.font = '20px sans-serif'; ctx.fillText('Tekan R untuk main lagi', 270, 220);
       }
     }
 
-    document.addEventListener('keydown', (e) => {
-      if (e.code === 'KeyR' && !mario.alive) resetGame();
-    });
-
-    function loop() {
-      update();
-      draw();
-      requestAnimationFrame(loop);
+    function drawMario() {
+      ctx.save();
+      ctx.translate(mario.x + mario.width / 2, mario.y + mario.height / 2);
+      if (mario.facing === -1) ctx.scale(-1, 1);
+      ctx.fillStyle = '#ff0000'; ctx.fillRect(-15, -18, 30, 18);
+      ctx.fillStyle = '#ffcc80'; ctx.fillRect(-10, -8, 20, 14);
+      ctx.fillStyle = '#0000ff'; ctx.fillRect(-13, 6, 26, 14);
+      ctx.fillStyle = '#5d4037'; ctx.fillRect(-13, 20, 26, 8);
+      ctx.fillStyle = '#ffcc80'; ctx.fillRect(-10, -22, 8, 6); ctx.fillRect(2, -22, 8, 6);
+      ctx.fillStyle = '#ff0000'; ctx.fillRect(-14, -26, 28, 6);
+      ctx.fillStyle = '#fff'; ctx.fillRect(-6, -14, 5, 5);
+      ctx.fillStyle = '#000'; ctx.fillRect(-5, -13, 2, 2);
+      ctx.restore();
     }
 
+    function loop() { update(); draw(); requestAnimationFrame(loop); }
     loop();
   </script>
 </body>
