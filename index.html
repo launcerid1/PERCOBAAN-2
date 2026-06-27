@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Super Mario Sederhana</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; min-height: 100vh;
+      background: linear-gradient(#87CEEB, #E0F7FA); font-family: sans-serif;
+    }
+    h1 { margin-bottom: 10px; color: #d32f2f; text-shadow: 2px 2px #fff; }
+    canvas {
+      border: 4px solid #333; border-radius: 6px;
+      background: #5c94fc; box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+    }
+    .info { margin-top: 12px; color: #333; font-weight: bold; }
+    .controls { margin-top: 8px; color: #555; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>Super Mario Sederhana</h1>
+  <canvas id="game" width="800" height="400"></canvas>
+  <div class="info">Skor: <span id="score">0</span></div>
+  <div class="controls">← → untuk bergerak | Spasi / ↑ untuk melompat</div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+
+    const GRAVITY = 0.6;
+    const FRICTION = 0.8;
+
+    const mario = {
+      x: 50, y: 300, width: 30, height: 40,
+      vx: 0, vy: 0, speed: 5, jump: -12,
+      grounded: false, color: '#ff0000', alive: true
+    };
+
+    const keys = {};
+    let score = 0;
+    let cameraX = 0;
+
+    const groundLevel = 340;
+    const platforms = [];
+    for (let i = 0; i < 50; i++) {
+      platforms.push({ x: i * 100, y: groundLevel, width: 100, height: 60 });
+    }
+
+    const obstacles = [
+      { x: 400, y: 310, width: 30, height: 30 },
+      { x: 700, y: 310, width: 30, height: 30 },
+      { x: 1100, y: 310, width: 30, height: 30 },
+      { x: 1500, y: 310, width: 30, height: 30 }
+    ];
+
+    const coins = [
+      { x: 350, y: 250, size: 15, taken: false },
+      { x: 650, y: 250, size: 15, taken: false },
+      { x: 950, y: 250, size: 15, taken: false },
+      { x: 1350, y: 250, size: 15, taken: false },
+      { x: 1750, y: 250, size: 15, taken: false }
+    ];
+
+    const flag = { x: 2200, y: 240, width: 40, height: 100 };
+
+    document.addEventListener('keydown', (e) => { keys[e.code] = true; });
+    document.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+    function update() {
+      if (!mario.alive) return;
+
+      if (keys['ArrowLeft']) mario.vx -= 1;
+      if (keys['ArrowRight']) mario.vx += 1;
+      if ((keys['Space'] || keys['ArrowUp']) && mario.grounded) {
+        mario.vy = mario.jump;
+        mario.grounded = false;
+      }
+
+      mario.vx *= FRICTION;
+      mario.vy += GRAVITY;
+      mario.x += mario.vx;
+      mario.y += mario.vy;
+
+      mario.grounded = false;
+      for (let p of platforms) {
+        if (mario.x + mario.width > p.x && mario.x < p.x + p.width &&
+            mario.y + mario.height > p.y && mario.y + mario.height < p.y + p.height + 20 &&
+            mario.vy >= 0) {
+          mario.y = p.y - mario.height;
+          mario.vy = 0;
+          mario.grounded = true;
+        }
+      }
+
+      if (mario.y > canvas.height) {
+        mario.alive = false;
+      }
+
+      for (let o of obstacles) {
+        if (rectIntersect(mario, o)) {
+          mario.alive = false;
+        }
+      }
+
+      for (let c of coins) {
+        if (!c.taken && circleRectIntersect(c, mario)) {
+          c.taken = true;
+          score += 10;
+          scoreEl.textContent = score;
+        }
+      }
+
+      if (rectIntersect(mario, flag)) {
+        alert('Selamat! Anda menang! Skor: ' + score);
+        resetGame();
+      }
+
+      cameraX = mario.x - 150;
+      if (cameraX < 0) cameraX = 0;
+    }
+
+    function rectIntersect(a, b) {
+      return a.x < b.x + b.width && a.x + a.width > b.x &&
+             a.y < b.y + b.height && a.y + a.height > b.y;
+    }
+
+    function circleRectIntersect(c, r) {
+      const closestX = Math.max(r.x, Math.min(c.x, r.x + r.width));
+      const closestY = Math.max(r.y, Math.min(c.y, r.y + r.height));
+      const dx = c.x - closestX;
+      const dy = c.y - closestY;
+      return (dx * dx + dy * dy) < (c.size * c.size);
+    }
+
+    function resetGame() {
+      mario.x = 50; mario.y = 300; mario.vx = 0; mario.vy = 0;
+      mario.alive = true; mario.grounded = false;
+      score = 0; scoreEl.textContent = score;
+      cameraX = 0;
+      coins.forEach(c => c.taken = false);
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.translate(-cameraX, 0);
+
+      for (let p of platforms) {
+        ctx.fillStyle = '#4caf50';
+        ctx.fillRect(p.x, p.y, p.width, p.height);
+        ctx.strokeStyle = '#2e7d32';
+        ctx.strokeRect(p.x, p.y, p.width, p.height);
+      }
+
+      for (let o of obstacles) {
+        ctx.fillStyle = '#795548';
+        ctx.beginPath();
+        ctx.moveTo(o.x + o.width / 2, o.y);
+        ctx.lineTo(o.x + o.width, o.y + o.height);
+        ctx.lineTo(o.x, o.y + o.height);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      for (let c of coins) {
+        if (!c.taken) {
+          ctx.fillStyle = '#ffd700';
+          ctx.beginPath();
+          ctx.arc(c.x, c.y, c.size, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#ff8c00';
+          ctx.stroke();
+        }
+      }
+
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(flag.x, flag.y, 10, flag.height);
+      ctx.fillStyle = '#ff0000';
+      ctx.beginPath();
+      ctx.moveTo(flag.x + 10, flag.y);
+      ctx.lineTo(flag.x + 50, flag.y + 20);
+      ctx.lineTo(flag.x + 10, flag.y + 40);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = mario.color;
+      ctx.fillRect(mario.x, mario.y, mario.width, mario.height);
+      ctx.fillStyle = '#ffcc80';
+      ctx.fillRect(mario.x + 5, mario.y + 5, 20, 15);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(mario.x + 18, mario.y + 8, 4, 4);
+      ctx.fillStyle = '#0000ff';
+      ctx.fillRect(mario.x + 2, mario.y + 20, 26, 14);
+
+      ctx.restore();
+
+      if (!mario.alive) {
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#fff';
+        ctx.font = '40px sans-serif';
+        ctx.fillText('Game Over!', 300, 180);
+        ctx.font = '20px sans-serif';
+        ctx.fillText('Tekan R untuk main lagi', 280, 220);
+      }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyR' && !mario.alive) resetGame();
+    });
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    loop();
+  </script>
+</body>
+</html>
